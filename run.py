@@ -20,10 +20,10 @@ def setup_venv():
     
     return str(python_exe), str(pip_exe)
 
-def install_deps(pip_exe):
+def install_deps(python_exe):
     print("Installing dependencies...")
-    subprocess.check_call([pip_exe, "install", "--upgrade", "pip"])
-    subprocess.check_call([pip_exe, "install", "-r", "requirements.txt"])
+    subprocess.check_call([python_exe, "-m", "pip", "install", "--upgrade", "pip"])
+    subprocess.check_call([python_exe, "-m", "pip", "install", "-r", "requirements.txt"])
 
 def get_oauth_token():
     env_path = Path(".env")
@@ -44,14 +44,18 @@ def get_oauth_token():
     print("="*50)
     print("1. Create an APP here: https://oauth.yandex.ru/")
     print("   - Platform: Web services")
-    print("   - Permissions: contest:read, contest:write (or contest:public_api)")
+    print("   - Permissions: contest:read, contest:public_api")
     print("   - Callback URL: https://oauth.yandex.ru/verification_code")
-    print("2. Get your Authorization Code by visiting (replace CLIENT_ID):")
-    print("   https://oauth.yandex.ru/authorize?response_type=code&client_id=YOUR_CLIENT_ID")
     print("="*50 + "\n")
 
     client_id = input("Enter CLIENT_ID: ").strip()
     client_secret = input("Enter CLIENT_SECRET: ").strip()
+
+    print("\n" + "="*50)
+    print("2. Now get your Authorization Code by visiting this link:")
+    print(f"   https://oauth.yandex.ru/authorize?response_type=code&client_id={client_id}")
+    print("="*50 + "\n")
+
     code = input("Enter AUTHORIZATION_CODE: ").strip()
 
     import requests # Available after install_deps
@@ -82,7 +86,7 @@ def get_oauth_token():
 
 def main():
     python_exe, pip_exe = setup_venv()
-    install_deps(pip_exe)
+    install_deps(python_exe)
     
     # We need requests to get the token, and it's installed now
     token = get_oauth_token()
