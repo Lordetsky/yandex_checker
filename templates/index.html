@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CU Contest Checker</title>
+  <meta name="description" content="Инструмент для проверки домашних заданий в Yandex Contest" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css?v=4" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">CU Contest Checker</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <!-- Controls -->
+    <section class="controls-card" id="controls-section">
+      <div class="controls-row">
+        <div class="field-group">
+          <label class="field-label" for="contest-id">ID контеста</label>
+          <input
+            id="contest-id"
+            class="field-input"
+            type="number"
+            placeholder="91235"
+            maxlength="6"
+          />
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="deadline">Дедлайн (МСК)</label>
+          <input
+            id="deadline"
+            class="field-input"
+            type="datetime-local"
+          />
+        </div>
+        <button id="load-btn" class="btn btn-primary" onclick="loadSubmissions()">
+          <span id="btn-text">Загрузить</span>
+          <span id="btn-spinner" class="spinner hidden"></span>
+        </button>
+      </div>
+      <div class="controls-row controls-row--single">
+        <div class="field-group field-group--wide">
+          <label class="field-label" for="author-filter">Фильтр по участнику (ФИО, частично)</label>
+          <input
+            id="author-filter"
+            class="field-input"
+            type="text"
+            placeholder="Иванов Иван"
+            list="authors-datalist"
+          />
+          <datalist id="authors-datalist"></datalist>
+        </div>
+        <button id="search-btn" class="btn btn-primary" onclick="loadSubmissions()">
+          <span>Поиск</span>
+          <span id="search-spinner" class="spinner hidden"></span>
+        </button>
+        <button class="btn btn-ghost" onclick="clearResults()">Сбросить</button>
+      </div>
+      <div id="error-msg" class="error-msg hidden"></div>
+    </section>
+
+    <!-- Results -->
+    <div id="results" class="hidden">
+
+      <!-- Stats panel -->
+      <section class="stats-section">
+        <h2 class="section-title" id="stats-title">Статистика</h2>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Всего посылок</div>
+            <div class="stat-value" id="stat-total">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Средний балл</div>
+            <div class="stat-value" id="stat-avg-score">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">До дедлайна</div>
+            <div class="stat-value green" id="stat-before">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">После дедлайна</div>
+            <div class="stat-value red" id="stat-after">—</div>
+          </div>
+          <div class="stat-card hidden" id="card-solved">
+            <div class="stat-label">Решено задач</div>
+            <div class="stat-value" id="stat-solved">—</div>
+          </div>
+          <div class="stat-card hidden" id="card-grade">
+            <div class="stat-label">Оценка (из 10)</div>
+            <div class="stat-value" id="stat-grade">—</div>
+          </div>
+        </div>
+
+        <!-- Verdict distribution -->
+        <div class="charts-row">
+          <div class="chart-card">
+            <div class="chart-title">Вердикты</div>
+            <div class="verdict-bars" id="verdict-bars"></div>
+          </div>
+          <div class="chart-card chart-card--wide">
+            <div class="chart-title">Посылки по времени</div>
+            <div class="chart-wrapper">
+              <canvas id="time-chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Submissions list -->
+      <section class="submissions-section">
+        <div class="submissions-header">
+          <h2 class="section-title">Посылки <span class="count-badge" id="sub-count">0</span></h2>
+          <div class="filter-row">
+            <input id="search-input" class="field-input field-input--sm" type="text" placeholder="Поиск по ФИО или задаче..." oninput="filterTable()" />
+            <select id="verdict-filter" class="field-input field-input--sm" onchange="filterTable()">
+              <option value="">Все вердикты</option>
+            </select>
+          </div>
+        </div>
+        <div id="submissions-container"></div>
+      </section>
+    </div>
+
+  </main>
+
+  <script src="/static/app.js?v=4"></script>
+</body>
+</html>
