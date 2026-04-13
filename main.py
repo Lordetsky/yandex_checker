@@ -324,7 +324,10 @@ def compute_stats(submissions: list, deadline_msk: datetime, is_person: bool = F
         
         if is_person and verdict in ("OK", "Accepted"):
             alias = sub.get("problem_alias")
-            if alias:
+            diff = sub.get("deadline_diff")
+            # Only count as solved if submitted BEFORE the deadline
+            is_on_time = diff and not diff["is_late"]
+            if alias and is_on_time:
                 solved_set.add(alias)
 
         sc = sub.get("score")
