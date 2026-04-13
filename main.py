@@ -382,13 +382,18 @@ async def get_submissions(
             "author": sub.get("author", ""),
             "compiler": sub.get("compiler", ""),
             "submission_time_msk": sub_time_msk.strftime("%d.%m.%Y %H:%M:%S") if sub_time_msk else "",
+            "timestamp": sub_time_msk.timestamp() if sub_time_msk else 0,
             "verdict": sub.get("verdict", ""),
             "score": sub.get("score"),
             "deadline_diff": deadline_diff,
             "has_full_report": False, # Signal to frontend to fetch it later
         })
 
-    enriched.sort(key=lambda x: x["submission_time_msk"], reverse=True)
+    # Sort by is_late (on-time first = 0, late = 1), then by newest (timestamp descending)
+    enriched.sort(key=lambda x: (
+        1 if (x.get("deadline_diff") and x["deadline_diff"].get("is_late")) else 0,
+        -x["timestamp"]
+    ))
     
     unique_authors = {s["author"] for s in enriched}
     is_single_student = len(unique_authors) == 1

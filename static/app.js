@@ -39,13 +39,22 @@ function verdictLabel(v) {
 
 // ===== Load submissions =====
 async function loadSubmissions(exactAuthorLogin = null) {
-  const contestId = document.getElementById("contest-id").value.trim();
-  const deadline = document.getElementById("deadline").value;
+  let contestId = document.getElementById("contest-id").value.trim();
+  let deadline = document.getElementById("deadline").value;
   const authorInput = document.getElementById("author-filter").value.trim();
   const author = exactAuthorLogin || authorInput;
 
   if (!contestId) { showError("Введите ID контеста"); return; }
-  if (!deadline) { showError("Укажите дату и время дедлайна"); return; }
+  
+  if (!deadline) { 
+      // User requested to automatically fill and proceed
+      await fetchContestInfo(); 
+      deadline = document.getElementById("deadline").value;
+      if (!deadline) {
+          showError("Укажите дату и время дедлайна"); 
+          return; 
+      }
+  }
 
   setLoading(true);
   hideError();
@@ -238,13 +247,16 @@ function renderTimeChart(distribution) {
 // ===== Submissions rendering =====
 function renderSubmissions(subs) {
   const container = document.getElementById("submissions-container");
+  const header = document.getElementById("sub-table-header");
   document.getElementById("sub-count").textContent = subs.length;
 
   if (subs.length === 0) {
     container.innerHTML = '<div class="empty-state">Посылки не найдены</div>';
+    if (header) header.classList.add("hidden");
     return;
   }
 
+  if (header) header.classList.remove("hidden");
   container.innerHTML = subs.map((s, idx) => buildSubItem(s, idx)).join("");
   
   // Apply highlight.js syntax highlighting
@@ -260,6 +272,32 @@ function buildSubItem(s, idx) {
        </span>`
     : `<span class="sub-cell--deadline">—</span>`;
 
+  let prevSub = null;
+  for (let i = 0; i < allSubmissions.length; i++) {
+     if (allSubmissions[i].author === s.author && allSubmissions[i].timestamp < s.timestamp) {
+         if (!prevSub || allSubmissions[i].timestamp > prevSub.timestamp) {
+             prevSub = allSubmissions[i];
+         }
+     }
+  }
+
+  let timeDiffHtml = `<span class="sub-cell sub-cell--timediff">—</span>`;
+  if (prevSub && s.timestamp && prevSub.timestamp) {
+       const diffSec = s.timestamp - prevSub.timestamp;
+       if (diffSec >= 0) {
+           const h = Math.floor(diffSec / 3600);
+           const m = Math.floor((diffSec % 3600) / 60);
+           const s_sec = Math.floor(diffSec % 60);
+           
+           let label = "";
+           if (h > 0) label = `+${h}ч ${m}м`;
+           else if (m > 0) label = `+${m}м ${s_sec}с`;
+           else label = `+${s_sec}с`;
+           
+           timeDiffHtml = `<span class="sub-cell sub-cell--timediff" title="После предыдущей: ${label}" style="color: var(--text-secondary); font-size: 11.5px;">${label}</span>`;
+       }
+  }
+
   const vClass = verdictClass(s.verdict);
   const vLabel = verdictLabel(s.verdict);
 
@@ -274,6 +312,7 @@ function buildSubItem(s, idx) {
         <span class="sub-cell"><span class="verdict-badge ${vClass}">${vLabel}</span></span>
         <span class="sub-cell">${s.score !== null ? s.score : '—'}</span>
         ${deadlineHtml}
+        ${timeDiffHtml}
         <span class="sub-cell sub-cell--expand">
           <span>Подробнее</span>
           <span class="chevron-${idx}">▼</span>
@@ -292,10 +331,13 @@ function buildDetailContent(s, idx) {
     : "";
 
   let prevSubId = null;
-  for (let i = idx + 1; i < allSubmissions.length; i++) {
-     if (allSubmissions[i].author === s.author && allSubmissions[i].problem_alias === s.problem_alias) {
-         prevSubId = allSubmissions[i].id;
-         break;
+  let prevSubTime = 0;
+  for (let i = 0; i < allSubmissions.length; i++) {
+     if (allSubmissions[i].author === s.author && allSubmissions[i].problem_alias === s.problem_alias && allSubmissions[i].timestamp < s.timestamp) {
+         if (!prevSubId || allSubmissions[i].timestamp > prevSubTime) {
+             prevSubId = allSubmissions[i].id;
+             prevSubTime = allSubmissions[i].timestamp;
+         }
      }
   }
 
@@ -549,6 +591,33 @@ function getHighlightLang(compiler) {
   return 'plaintext';
 }
 
+async function fetchContestInfo() {
+  const contestId = document.getElementById("contest-id").value.trim();
+  if (!contestId || contestId.length < 3) return;
+
+  const dlInput = document.getElementById("deadline");
+  if (dlInput.value) return; // do not overwrite if already set
+
+  try {
+    const res = await fetch(`/api/contest-info?contest_id=${contestId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.startTime) {
+      if (dlInput.value) return; // double check
+      const startDt = new Date(data.startTime);
+      startDt.setDate(startDt.getDate() + 14); // 2 weeks
+
+      const yyyy = startDt.getFullYear();
+      const MM = String(startDt.getMonth() + 1).padStart(2, '0');
+      const dd = String(startDt.getDate()).padStart(2, '0');
+      
+      dlInput.value = `${yyyy}-${MM}-${dd}T22:00`;
+    }
+  } catch (e) {
+    console.error("Failed to fetch contest info", e);
+  }
+}
+
 // Support Enter key
 document.addEventListener("DOMContentLoaded", () => {
   const contestInput = document.getElementById("contest-id");
@@ -562,9 +631,15 @@ document.addEventListener("DOMContentLoaded", () => {
   // Fetch authors for autocomplete when contest ID changes
   contestInput.addEventListener("input", () => {
     clearTimeout(fetchTimeout);
-    fetchTimeout = setTimeout(fetchAuthors, 500);
+    fetchTimeout = setTimeout(() => {
+        fetchAuthors();
+        fetchContestInfo();
+    }, 500);
   });
-  contestInput.addEventListener("change", fetchAuthors);
+  contestInput.addEventListener("change", () => {
+      fetchAuthors();
+      fetchContestInfo();
+  });
 
   document.getElementById("deadline").addEventListener("keydown", e => {
     if (e.key === "Enter") loadSubmissions();
