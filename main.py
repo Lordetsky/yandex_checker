@@ -249,6 +249,35 @@ async def get_full_submission(contest_id: int, sub_id: int):
         return resp.json()
 
 
+@app.get("/api/submissions/{contest_id}/diff")
+async def get_submission_diff(contest_id: int, sub1: int, sub2: int):
+    """Fetch diff between two submissions (sub1 is older, sub2 is newer)."""
+    async def fetch_code(client: httpx.AsyncClient, sub_id: int) -> str:
+        resp = await client.get(
+            f"{BASE_URL}/contests/{contest_id}/submissions/{sub_id}/full",
+            headers=get_headers(),
+        )
+        if resp.status_code == 200:
+            return resp.json().get("source", "")
+        return ""
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        source1, source2 = await asyncio.gather(
+            fetch_code(client, sub1),
+            fetch_code(client, sub2)
+        )
+        
+    diff_lines = list(difflib.unified_diff(
+        source1.splitlines(),
+        source2.splitlines(),
+        fromfile=f"Submission #{sub1}",
+        tofile=f"Submission #{sub2}",
+        lineterm=""
+    ))
+    
+    return {"diff": "\n".join(diff_lines)}
+
+
 @app.get("/api/submissions")
 async def get_submissions(
     contest_id: int,

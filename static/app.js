@@ -291,6 +291,24 @@ function buildDetailContent(s, idx) {
     ? `<div style="margin-bottom:12px;font-size:13px;color:var(--text-secondary)">Задача: <strong>${s.problem_name}</strong> (${s.problem_alias})</div>`
     : "";
 
+  let prevSubId = null;
+  for (let i = idx + 1; i < allSubmissions.length; i++) {
+     if (allSubmissions[i].author === s.author && allSubmissions[i].problem_alias === s.problem_alias) {
+         prevSubId = allSubmissions[i].id;
+         break;
+     }
+  }
+
+  const diffTabHtml = prevSubId 
+    ? `<button class="tab-btn" onclick="switchTab(${idx}, 'diff', this); loadDiff(${idx}, ${prevSubId}, ${s.id})">Разница с пред. (#${prevSubId})</button>`
+    : "";
+
+  const diffPanelHtml = prevSubId
+    ? `<div class="tab-panel" id="tab-diff-${idx}">
+         <div id="diff-content-${idx}" style="padding:16px"><div class="empty-state">Нажмите чтобы загрузить...</div></div>
+       </div>`
+    : "";
+
   // If reports haven't been loaded, buildTestsList will handle empty tests
   const testsAllHtml = buildTestsList(s.tests_all, `tests-all-${idx}`);
   const testsFailedHtml = s.tests_failed && s.tests_failed.length > 0
@@ -300,6 +318,7 @@ function buildDetailContent(s, idx) {
   return `
     <div class="detail-tabs">
       <button class="tab-btn active" onclick="switchTab(${idx}, 'source', this)">Код</button>
+      ${diffTabHtml}
       <button class="tab-btn" onclick="switchTab(${idx}, 'tests-all', this)">Все тесты (${s.tests_all ? s.tests_all.length : 0})</button>
       <button class="tab-btn" onclick="switchTab(${idx}, 'tests-failed', this)">Не OK (${s.tests_failed ? s.tests_failed.length : 0})</button>
     </div>
@@ -307,6 +326,7 @@ function buildDetailContent(s, idx) {
     <div class="tab-panel active" id="tab-source-${idx}">
       <pre class="code-block"><code class="language-${getHighlightLang(s.compiler)}">${escapeHtml(s.source || '— нет кода —')}</code></pre>
     </div>
+    ${diffPanelHtml}
     <div class="tab-panel" id="tab-tests-all-${idx}">
       ${testsAllHtml}
     </div>
@@ -425,6 +445,30 @@ function switchTab(idx, tabName, btn) {
   btn.classList.add("active");
   const panel = document.getElementById(`tab-${tabName}-${idx}`);
   if (panel) panel.classList.add("active");
+}
+
+async function loadDiff(idx, prevId, currentId) {
+    const contentDiv = document.getElementById(`diff-content-${idx}`);
+    if (contentDiv.dataset.loaded) return;
+    
+    contentDiv.innerHTML = '<div class="loader-container" style="padding:40px; text-align:center;"><span class="spinner spinner--small"></span> <span style="margin-left:12px; color:var(--text-secondary)">Сравнение кода...</span></div>';
+    
+    try {
+        const contestId = document.getElementById("contest-id").value.trim();
+        const res = await fetch(`/api/submissions/${contestId}/diff?sub1=${prevId}&sub2=${currentId}`);
+        if (!res.ok) throw new Error("Ошибка загрузки");
+        const data = await res.json();
+        
+        if (!data.diff) {
+             contentDiv.innerHTML = '<div class="empty-state" style="padding:16px">Изменений в коде нет</div>';
+        } else {
+             contentDiv.innerHTML = `<pre class="code-block"><code class="language-diff">${escapeHtml(data.diff)}</code></pre>`;
+             hljs.highlightElement(contentDiv.querySelector('code'));
+        }
+        contentDiv.dataset.loaded = "true";
+    } catch (e) {
+        contentDiv.innerHTML = `<div class="error-msg" style="padding:20px; color:var(--danger)">Ошибка: ${e.message}</div>`;
+    }
 }
 
 // ===== Filtering =====
