@@ -38,10 +38,11 @@ function verdictLabel(v) {
 }
 
 // ===== Load submissions =====
-async function loadSubmissions() {
+async function loadSubmissions(exactAuthorLogin = null) {
   const contestId = document.getElementById("contest-id").value.trim();
   const deadline = document.getElementById("deadline").value;
-  const author = document.getElementById("author-filter").value.trim();
+  const authorInput = document.getElementById("author-filter").value.trim();
+  const author = exactAuthorLogin || authorInput;
 
   if (!contestId) { showError("Введите ID контеста"); return; }
   if (!deadline) { showError("Укажите дату и время дедлайна"); return; }
@@ -54,7 +55,12 @@ async function loadSubmissions() {
       contest_id: contestId,
       deadline: deadline,
     });
-    if (author) params.append("author", author);
+    if (author) {
+      params.append("author", author);
+      if (exactAuthorLogin) {
+        params.append("exact_match", "true");
+      }
+    }
 
     const res = await fetch(`/api/submissions?${params}`);
     if (!res.ok) {
@@ -62,6 +68,13 @@ async function loadSubmissions() {
       throw new Error(err.detail || `HTTP ${res.status}`);
     }
     const data = await res.json();
+    
+    if (data.status === "multiple") {
+        showDisambiguationModal(data.matches);
+        setLoading(false);
+        return;
+    }
+
     allSubmissions = data.submissions;
     currentStats = data.stats;
 
@@ -95,6 +108,31 @@ async function fetchAuthors() {
   } catch (e) {
     console.error("Failed to fetch authors", e);
   }
+}
+
+// ===== Modal Logic =====
+function showDisambiguationModal(matches) {
+  const modal = document.getElementById("disambiguation-modal");
+  const listContainer = document.getElementById("modal-authors-list");
+  
+  listContainer.innerHTML = matches.map(m => `
+    <button class="author-btn" onclick="selectAuthor('${escapeHtml(m.author)}')">
+      <span class="author-btn-name">${escapeHtml(m.name)}</span>
+      <span class="author-btn-login">${escapeHtml(m.author)}</span>
+    </button>
+  `).join("");
+  
+  modal.classList.remove("hidden");
+}
+
+function closeModal() {
+  document.getElementById("disambiguation-modal").classList.add("hidden");
+}
+
+function selectAuthor(login) {
+  closeModal();
+  document.getElementById("author-filter").value = login;
+  loadSubmissions(login);
 }
 
 function clearResults() {

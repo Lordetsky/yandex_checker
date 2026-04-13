@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 from pathlib import Path
 from functools import lru_cache
+import openpyxl
 
 load_dotenv()
 
@@ -45,6 +46,20 @@ def set_cached_data(contest_id: int, key: str, data):
     expire_at = datetime.now() + timedelta(seconds=CACHE_TTL)
     CACHE[(contest_id, key)] = (expire_at, data)
 
+# --- Students Database ---
+STUDENTS_DB = []
+try:
+    if os.path.exists('Students.xlsx'):
+        wb = openpyxl.load_workbook('Students.xlsx', data_only=True)
+        ws = wb.active
+        for idx, row in enumerate(ws.values):
+            if idx == 0: continue
+            email, full_name = row[0], row[1]
+            if email and full_name:
+                STUDENTS_DB.append({'email': str(email).lower().strip(), 'full_name': str(full_name).lower().strip()})
+except Exception as e:
+    print("Warning: Could not load Students.xlsx:", e)
+
 # --- Search Utils ---
 CYR_TO_LAT = {
     'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
@@ -60,15 +75,27 @@ def transliterate(text: str) -> str:
         res.append(CYR_TO_LAT.get(char, char))
     return "".join(res)
 
-def check_author_match(query: str, author: str, threshold: float = 0.7) -> bool:
+def get_author_name(author: str) -> str:
+    author_lower = author.lower().strip()
+    for student in STUDENTS_DB:
+        email = student['email']
+        email_prefix = email.split('@')[0]
+        if author_lower in (email, email_prefix, student['full_name']):
+            return student['full_name'].title()
+    return author
+
+def check_author_match_fuzzy(query: str, author: str, threshold: float = 0.7) -> bool:
     if not query:
         return True
     
-    q_parts = query.lower().strip().split()
+    query_lower = query.lower().strip()
+    author_lower = author.lower().strip()
+    
+    q_parts = query_lower.split()
     if not q_parts:
         return True
         
-    a = author.lower().strip()
+    a = author_lower
     a_lat = transliterate(a) # Convert author name to latin too (in case it's in Cyrillic)
     
     # Check if ALL words from query are present in author string (directly or transliterated)
@@ -227,6 +254,7 @@ async def get_submissions(
     contest_id: int,
     deadline: str,
     author: Optional[str] = None,
+    exact_match: bool = False,
 ):
     """
     Fetch submissions for a contest. Uses lazy loading for code/logs.
@@ -269,10 +297,46 @@ async def get_submissions(
             set_cached_data(contest_id, "submissions", all_submissions)
             set_cached_data(contest_id, "problems", problems_map)
 
-    # Filtering logic (improved with транслитерация and fuzzy match)
-    filtered = all_submissions
+    # Filtering logic (improved with 3-tier cascade and disambiguation)
     if author:
-        filtered = [s for s in all_submissions if check_author_match(author, s.get("author", ""))]
+        if exact_match:
+            filtered = [s for s in all_submissions if s.get("author", "") == author]
+        else:
+            unique_authors = {s.get("author", "") for s in all_submissions if s.get("author")}
+            
+            query_lower = author.lower().strip()
+            
+            # Tier 1: Direct substring in Yandex login
+            t1 = {a for a in unique_authors if query_lower in a.lower()}
+            
+            # Tier 2: DB Lookup
+            t2 = set()
+            if not t1:
+                for a in unique_authors:
+                    a_lower = a.lower()
+                    for student in STUDENTS_DB:
+                        if query_lower in student['full_name']:
+                            email = student['email']
+                            email_prefix = email.split('@')[0]
+                            if a_lower in (email, email_prefix, student['full_name']):
+                                t2.add(a)
+            
+            # Tier 3: Fuzzy matching
+            t3 = set()
+            if not t1 and not t2:
+                for a in unique_authors:
+                    if check_author_match_fuzzy(query_lower, a):
+                        t3.add(a)
+                        
+            active_matches = t1 or t2 or t3
+            
+            if len(active_matches) > 1:
+                matches_info = [{"author": am, "name": get_author_name(am)} for am in sorted(list(active_matches))]
+                return {"status": "multiple", "matches": matches_info}
+                
+            filtered = [s for s in all_submissions if s.get("author", "") in active_matches]
+    else:
+        filtered = all_submissions
 
     # Enriching metadata (problem name and deadline)
     enriched = []

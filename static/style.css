@@ -494,3 +494,90 @@ body {
 
 /* ===== Utilities ===== */
 .hidden { display: none !important; }
+
+/* ===== Modal ===== */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(15, 17, 23, 0.4);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 1;
+  visibility: visible;
+  transition: all 0.2s ease-out;
+}
+.modal-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+.modal-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  width: 90%;
+  max-width: 440px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(0) scale(1);
+  transition: all 0.2s ease-out;
+}
+.modal-overlay.hidden .modal-content {
+  transform: translateY(10px) scale(0.98);
+}
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.modal-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+.authors-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px; /* for scrollbar */
+}
+.authors-list::-webkit-scrollbar {
+  width: 6px;
+}
+.authors-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+}
+.author-btn {
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.author-btn:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+.author-btn-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.author-btn-login {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}

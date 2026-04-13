@@ -135,6 +135,16 @@
 
   </main>
 
+  <!-- Disambiguation Modal -->
+  <div id="disambiguation-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <h3 class="modal-title">Найдено несколько участников</h3>
+      <p class="modal-text">Мы нашли несколько подходящих профилей. Кого вы имели в виду?</p>
+      <div id="modal-authors-list" class="authors-list"></div>
+      <button class="btn btn-ghost" style="margin-top: 8px; width: 100%" onclick="closeModal()">Отмена</button>
+    </div>
+  </div>
+
   <script src="/static/app.js?v=4"></script>
 </body>
 </html>
