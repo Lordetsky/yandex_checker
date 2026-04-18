@@ -35,3 +35,4 @@ ENV/
 # Project specific
 .env
 static/style.css?v=*
+contests_registry.json

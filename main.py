@@ -7,6 +7,7 @@ import httpx
 import asyncio
 import difflib
 import os
+import json
 from dotenv import load_dotenv
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
@@ -29,6 +30,46 @@ BASE_URL = "https://api.contest.yandex.net/api/public/v2"
 OAUTH_TOKEN = os.getenv("YANDEX_TOKEN")
 
 MOSCOW_TZ = timezone(timedelta(hours=3))
+
+# --- Contest Registry ---
+REGISTRY_FILE = Path("contests_registry.json")
+CONTESTS_REGISTRY: list = []  # [{"id": int, "name": str, "startTime": str|None, "lastUsed": str}]
+
+def load_registry():
+    global CONTESTS_REGISTRY
+    if REGISTRY_FILE.exists():
+        try:
+            with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
+                CONTESTS_REGISTRY = json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load contests registry: {e}")
+            CONTESTS_REGISTRY = []
+
+def save_registry():
+    try:
+        with open(REGISTRY_FILE, "w", encoding="utf-8") as f:
+            json.dump(CONTESTS_REGISTRY, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Warning: Could not save contests registry: {e}")
+
+def upsert_contest(contest_id: int, name: str, start_time: str = None):
+    """Add or update a contest in the registry."""
+    now = datetime.now(MOSCOW_TZ).isoformat()
+    for entry in CONTESTS_REGISTRY:
+        if entry["id"] == contest_id:
+            entry["name"] = name
+            entry["lastUsed"] = now
+            if start_time:
+                entry["startTime"] = start_time
+            save_registry()
+            return entry
+    new_entry = {"id": contest_id, "name": name, "startTime": start_time, "lastUsed": now}
+    CONTESTS_REGISTRY.append(new_entry)
+    CONTESTS_REGISTRY.sort(key=lambda x: x["id"])
+    save_registry()
+    return new_entry
+
+load_registry()
 
 # --- Simple In-Memory Cache ---
 CACHE = {}  # { (contest_id, key): (expire_at, data) }
@@ -486,4 +527,55 @@ async def get_contest_info(contest_id: int):
         )
         if resp.status_code != 200:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
-        return resp.json()
+        data = resp.json()
+        # Auto-save to registry
+        name = data.get("name", f"Contest #{contest_id}")
+        start_time = data.get("startTime")
+        upsert_contest(contest_id, name, start_time)
+        return data
+
+
+@app.get("/api/contests")
+async def get_contests():
+    """Return the local contest registry, sorted by ID."""
+    return {"contests": sorted(CONTESTS_REGISTRY, key=lambda x: x["id"])}
+
+
+@app.post("/api/contests/add")
+async def add_contest(contest_id: int):
+    """Fetch contest info from Yandex API and add to registry."""
+    # Check if already in registry
+    for entry in CONTESTS_REGISTRY:
+        if entry["id"] == contest_id:
+            # Update lastUsed
+            entry["lastUsed"] = datetime.now(MOSCOW_TZ).isoformat()
+            save_registry()
+            return {"status": "exists", "contest": entry}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            f"{BASE_URL}/contests/{contest_id}",
+            headers=get_headers(),
+        )
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=resp.status_code,
+                detail=f"Контест #{contest_id} не найден или нет доступа"
+            )
+        data = resp.json()
+        name = data.get("name", f"Contest #{contest_id}")
+        start_time = data.get("startTime")
+        entry = upsert_contest(contest_id, name, start_time)
+        return {"status": "added", "contest": entry}
+
+
+@app.delete("/api/contests/{contest_id}")
+async def delete_contest(contest_id: int):
+    """Remove a contest from the local registry."""
+    global CONTESTS_REGISTRY
+    before = len(CONTESTS_REGISTRY)
+    CONTESTS_REGISTRY = [c for c in CONTESTS_REGISTRY if c["id"] != contest_id]
+    if len(CONTESTS_REGISTRY) < before:
+        save_registry()
+        return {"status": "deleted"}
+    raise HTTPException(status_code=404, detail="Contest not found in registry")

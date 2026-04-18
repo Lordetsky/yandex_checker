@@ -7,7 +7,7 @@
   <meta name="description" content="Инструмент для проверки домашних заданий в Yandex Contest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/style.css?v=4" />
+  <link rel="stylesheet" href="/static/style.css?v=5" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -27,14 +27,30 @@
     <section class="controls-card" id="controls-section">
       <div class="controls-row">
         <div class="field-group">
-          <label class="field-label" for="contest-id">ID контеста</label>
-          <input
-            id="contest-id"
-            class="field-input"
-            type="number"
-            placeholder="91235"
-            maxlength="6"
-          />
+          <label class="field-label" for="contest-id">Контест</label>
+          <div class="contest-combo" id="contest-combo">
+            <div class="combo-input-wrap">
+              <input
+                id="contest-id"
+                class="field-input combo-input"
+                type="text"
+                placeholder="ID или название..."
+                autocomplete="off"
+              />
+              <button class="combo-toggle-btn" id="combo-toggle" type="button" title="Показать список">
+                <span class="combo-chevron">▼</span>
+              </button>
+            </div>
+            <div class="combo-dropdown hidden" id="combo-dropdown">
+              <div class="combo-dropdown-header">
+                <span class="combo-dropdown-title">Мои контесты</span>
+                <button class="combo-add-btn" id="open-add-modal" type="button" title="Добавить контест">＋ Добавить</button>
+              </div>
+              <div class="combo-list" id="combo-list">
+                <div class="combo-empty">Нет сохранённых контестов</div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="field-group">
           <label class="field-label" for="deadline">Дедлайн (МСК)</label>
@@ -157,6 +173,32 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=4"></script>
+  <!-- Add Contest Modal -->
+  <div id="add-contest-modal" class="modal-overlay hidden">
+    <div class="modal-content modal-content--wide">
+      <div class="modal-header-row">
+        <h3 class="modal-title">Добавить контесты</h3>
+        <button class="modal-close-btn" onclick="closeAddContestModal()" title="Закрыть">✕</button>
+      </div>
+      <p class="modal-text">Введите ID контеста и нажмите Enter или «Добавить». Контест сразу подгрузится из Яндекса.</p>
+      <div class="add-contest-input-row">
+        <input
+          id="add-contest-input"
+          class="field-input"
+          type="number"
+          placeholder="Например: 91235"
+          style="flex:1"
+        />
+        <button id="add-contest-btn" class="btn btn-primary" onclick="addContestFromModal()">
+          <span id="add-contest-btn-text">Добавить</span>
+          <span id="add-contest-spinner" class="spinner hidden"></span>
+        </button>
+      </div>
+      <div id="add-contest-error" class="error-msg hidden" style="margin-top:8px"></div>
+      <div class="added-contests-list" id="added-contests-list"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=5"></script>
 </body>
 </html>

@@ -39,12 +39,13 @@ function verdictLabel(v) {
 
 // ===== Load submissions =====
 async function loadSubmissions(exactAuthorLogin = null) {
-  let contestId = document.getElementById("contest-id").value.trim();
+  let contestInputVal = document.getElementById("contest-id").value.trim();
+  let contestId = parseInt(contestInputVal, 10);
   let deadline = document.getElementById("deadline").value;
   const authorInput = document.getElementById("author-filter").value.trim();
   const author = exactAuthorLogin || authorInput;
 
-  if (!contestId) { showError("Введите ID контеста"); return; }
+  if (isNaN(contestId)) { showError("Выберите контест из списка или введите ID"); return; }
   
   if (!deadline) { 
       // User requested to automatically fill and proceed
@@ -105,8 +106,9 @@ async function loadSubmissions(exactAuthorLogin = null) {
 }
 
 async function fetchAuthors() {
-  const contestId = document.getElementById("contest-id").value.trim();
-  if (!contestId || contestId.length < 3) return;
+  const contestInputVal = document.getElementById("contest-id").value.trim();
+  const contestId = parseInt(contestInputVal, 10);
+  if (isNaN(contestId) || contestId < 100) return;
   
   try {
     const res = await fetch(`/api/authors?contest_id=${contestId}`);
@@ -592,8 +594,9 @@ function getHighlightLang(compiler) {
 }
 
 async function fetchContestInfo() {
-  const contestId = document.getElementById("contest-id").value.trim();
-  if (!contestId || contestId.length < 3) return;
+  const contestInputVal = document.getElementById("contest-id").value.trim();
+  const contestId = parseInt(contestInputVal, 10);
+  if (isNaN(contestId) || contestId < 100) return;
 
   const dlInput = document.getElementById("deadline");
   if (dlInput.value) return; // do not overwrite if already set
@@ -618,17 +621,219 @@ async function fetchContestInfo() {
   }
 }
 
-// Support Enter key
+// ===== Contest Combo Box Logic =====
+let savedContests = [];
+let comboOpen = false;
+
+async function fetchSavedContests() {
+  try {
+    const res = await fetch("/api/contests");
+    if (res.ok) {
+      const data = await res.json();
+      savedContests = data.contests || [];
+      renderComboList();
+    }
+  } catch(e) { console.error("Error fetching contests", e); }
+}
+
+function initContestCombo() {
+  const comboInput = document.getElementById("contest-id");
+  const comboToggle = document.getElementById("combo-toggle");
+  const comboDropdown = document.getElementById("combo-dropdown");
+  const chevron = comboToggle.querySelector(".combo-chevron");
+  
+  fetchSavedContests();
+
+  comboToggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    comboOpen = !comboOpen;
+    comboDropdown.classList.toggle("hidden", !comboOpen);
+    chevron.classList.toggle("open", comboOpen);
+    if (comboOpen) {
+      comboInput.focus();
+      renderComboList();
+    }
+  });
+
+  comboInput.addEventListener("focus", () => {
+    comboOpen = true;
+    comboDropdown.classList.remove("hidden");
+    chevron.classList.add("open");
+    renderComboList();
+  });
+
+  comboInput.addEventListener("input", () => {
+    comboOpen = true;
+    comboDropdown.classList.remove("hidden");
+    chevron.classList.add("open");
+    renderComboList();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".contest-combo")) {
+      comboOpen = false;
+      comboDropdown.classList.add("hidden");
+      chevron.classList.remove("open");
+    }
+  });
+}
+
+function renderComboList() {
+  const list = document.getElementById("combo-list");
+  const query = document.getElementById("contest-id").value.trim().toLowerCase();
+  
+  let filtered = savedContests;
+  if (query && !(/^\d+$/.test(query))) {
+    filtered = savedContests.filter(c => 
+      c.id.toString().includes(query) || 
+      (c.name && c.name.toLowerCase().includes(query))
+    );
+  }
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="combo-empty">Контесты не найдены</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(c => {
+    let nameHtml = escapeHtml(c.name || `Contest #${c.id}`);
+    let idHtml = escapeHtml(c.id);
+    if (query && !(/^\d+$/.test(query))) {
+       const reg = new RegExp(`(${query})`, 'gi');
+       nameHtml = nameHtml.replace(reg, '<span class="combo-highlight">$1</span>');
+       idHtml = idHtml.replace(reg, '<span class="combo-highlight">$1</span>');
+    }
+    
+    return `
+      <div class="combo-item" onclick="selectContest(${c.id})">
+        <span class="combo-item-id">${idHtml}</span>
+        <span class="combo-item-name" title="${escapeHtml(c.name)}">${nameHtml}</span>
+        <button class="combo-item-delete" onclick="deleteContest(event, ${c.id})" title="Удалить из списка">×</button>
+      </div>
+    `;
+  }).join("");
+}
+
+window.selectContest = function(id) {
+  const comboInput = document.getElementById("contest-id");
+  comboInput.value = id;
+  comboOpen = false;
+  document.getElementById("combo-dropdown").classList.add("hidden");
+  document.querySelector(".combo-chevron").classList.remove("open");
+  
+  fetchAuthors();
+  fetchContestInfo();
+};
+
+window.deleteContest = async function(e, id) {
+  e.preventDefault();
+  e.stopPropagation();
+  if(!confirm("Удалить контест из списка?")) return;
+  try {
+    const res = await fetch(`/api/contests/${id}`, { method: "DELETE" });
+    if(res.ok) await fetchSavedContests();
+  } catch(err) { console.error("Error deleting contest", err); }
+};
+
+// ===== Add Contest Modal Logic =====
+function initAddContestModal() {
+  document.getElementById("open-add-modal").addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    document.getElementById("combo-dropdown").classList.add("hidden");
+    document.querySelector(".combo-chevron").classList.remove("open");
+    comboOpen = false;
+    
+    document.getElementById("add-contest-modal").classList.remove("hidden");
+    document.getElementById("add-contest-input").focus();
+    document.getElementById("add-contest-input").value = "";
+    document.getElementById("added-contests-list").innerHTML = "";
+    document.getElementById("add-contest-error").classList.add("hidden");
+  });
+
+  document.getElementById("add-contest-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") window.addContestFromModal();
+  });
+}
+
+window.closeAddContestModal = function() {
+  document.getElementById("add-contest-modal").classList.add("hidden");
+  fetchSavedContests(); // update dropdown
+};
+
+window.addContestFromModal = async function() {
+  const input = document.getElementById("add-contest-input");
+  const btn = document.getElementById("add-contest-btn");
+  const spinner = document.getElementById("add-contest-spinner");
+  const btnText = document.getElementById("add-contest-btn-text");
+  const errEl = document.getElementById("add-contest-error");
+  const listEl = document.getElementById("added-contests-list");
+  
+  const val = input.value.trim();
+  if (!val) return;
+  
+  const idStr = val.match(/\d+/);
+  if (!idStr) {
+      errEl.textContent = "Некорректный ID контеста";
+      errEl.classList.remove("hidden");
+      return;
+  }
+  const id = parseInt(idStr[0], 10);
+  
+  errEl.classList.add("hidden");
+  
+  btn.disabled = true;
+  spinner.classList.remove("hidden");
+  btnText.textContent = "Загрузка...";
+  
+  try {
+    const res = await fetch(`/api/contests/add?contest_id=${id}`, { method: "POST" });
+    if (!res.ok) {
+        let errData = { detail: "Ошибка добавления" };
+        try { errData = await res.json(); } catch(e) {}
+        throw new Error(errData.detail || "Ошибка добавления");
+    }
+    const data = await res.json();
+    
+    // Add to list UI
+    const c = data.contest;
+    let stClass = data.status === "exists" ? "exists" : "success";
+    let stText = data.status === "exists" ? "Обновлён" : "Добавлен";
+    
+    const html = `
+      <div class="added-contest-item">
+        <span class="added-contest-id">${c.id}</span>
+        <span class="added-contest-name">${escapeHtml(c.name)}</span>
+        <span class="added-contest-status ${stClass}">${stText}</span>
+      </div>
+    `;
+    listEl.insertAdjacentHTML("afterbegin", html);
+    input.value = "";
+    input.focus();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    spinner.classList.add("hidden");
+    btnText.textContent = "Добавить";
+  }
+};
+
+// Initialization
 document.addEventListener("DOMContentLoaded", () => {
   const contestInput = document.getElementById("contest-id");
   const authorInput = document.getElementById("author-filter");
   let fetchTimeout = null;
 
+  initContestCombo();
+  initAddContestModal();
+
   contestInput.addEventListener("keydown", e => {
     if (e.key === "Enter") loadSubmissions();
   });
   
-  // Fetch authors for autocomplete when contest ID changes
   contestInput.addEventListener("input", () => {
     clearTimeout(fetchTimeout);
     fetchTimeout = setTimeout(() => {
@@ -645,12 +850,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter") loadSubmissions();
   });
   
-  // Trigger search when Enter is pressed
   authorInput.addEventListener("keydown", e => {
     if (e.key === "Enter") loadSubmissions();
   });
 
-  // Automatically trigger search when an option is selected from the datalist
   authorInput.addEventListener("input", (e) => {
     const val = e.target.value;
     const datalist = document.getElementById("authors-datalist");
