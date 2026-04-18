@@ -65,7 +65,7 @@ def upsert_contest(contest_id: int, name: str, start_time: str = None):
             return entry
     new_entry = {"id": contest_id, "name": name, "startTime": start_time, "lastUsed": now}
     CONTESTS_REGISTRY.append(new_entry)
-    CONTESTS_REGISTRY.sort(key=lambda x: x["id"])
+    CONTESTS_REGISTRY.sort(key=lambda x: x["id"], reverse=True)
     save_registry()
     return new_entry
 
