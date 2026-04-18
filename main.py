@@ -65,7 +65,7 @@ def upsert_contest(contest_id: int, name: str, start_time: str = None):
             return entry
     new_entry = {"id": contest_id, "name": name, "startTime": start_time, "lastUsed": now}
     CONTESTS_REGISTRY.append(new_entry)
-    CONTESTS_REGISTRY.sort(key=lambda x: x["id"])
+    CONTESTS_REGISTRY.sort(key=lambda x: x["id"], reverse=True)
     save_registry()
     return new_entry
 
@@ -537,8 +537,8 @@ async def get_contest_info(contest_id: int):
 
 @app.get("/api/contests")
 async def get_contests():
-    """Return the local contest registry, sorted by ID."""
-    return {"contests": sorted(CONTESTS_REGISTRY, key=lambda x: x["id"])}
+    """Return the local contest registry, sorted by ID descending."""
+    return {"contests": sorted(CONTESTS_REGISTRY, key=lambda x: x["id"], reverse=True)}
 
 
 @app.post("/api/contests/add")
@@ -568,14 +568,3 @@ async def add_contest(contest_id: int):
         entry = upsert_contest(contest_id, name, start_time)
         return {"status": "added", "contest": entry}
 
-
-@app.delete("/api/contests/{contest_id}")
-async def delete_contest(contest_id: int):
-    """Remove a contest from the local registry."""
-    global CONTESTS_REGISTRY
-    before = len(CONTESTS_REGISTRY)
-    CONTESTS_REGISTRY = [c for c in CONTESTS_REGISTRY if c["id"] != contest_id]
-    if len(CONTESTS_REGISTRY) < before:
-        save_registry()
-        return {"status": "deleted"}
-    raise HTTPException(status_code=404, detail="Contest not found in registry")
