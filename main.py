@@ -527,44 +527,4 @@ async def get_contest_info(contest_id: int):
         )
         if resp.status_code != 200:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
-        data = resp.json()
-        # Auto-save to registry
-        name = data.get("name", f"Contest #{contest_id}")
-        start_time = data.get("startTime")
-        upsert_contest(contest_id, name, start_time)
-        return data
-
-
-@app.get("/api/contests")
-async def get_contests():
-    """Return the local contest registry, sorted by ID descending."""
-    return {"contests": sorted(CONTESTS_REGISTRY, key=lambda x: x["id"], reverse=True)}
-
-
-@app.post("/api/contests/add")
-async def add_contest(contest_id: int):
-    """Fetch contest info from Yandex API and add to registry."""
-    # Check if already in registry
-    for entry in CONTESTS_REGISTRY:
-        if entry["id"] == contest_id:
-            # Update lastUsed
-            entry["lastUsed"] = datetime.now(MOSCOW_TZ).isoformat()
-            save_registry()
-            return {"status": "exists", "contest": entry}
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.get(
-            f"{BASE_URL}/contests/{contest_id}",
-            headers=get_headers(),
-        )
-        if resp.status_code != 200:
-            raise HTTPException(
-                status_code=resp.status_code,
-                detail=f"Контест #{contest_id} не найден или нет доступа"
-            )
-        data = resp.json()
-        name = data.get("name", f"Contest #{contest_id}")
-        start_time = data.get("startTime")
-        entry = upsert_contest(contest_id, name, start_time)
-        return {"status": "added", "contest": entry}
-
+        return resp.json()
